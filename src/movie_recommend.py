@@ -45,40 +45,107 @@ def get_recommendations(movie_id: int) -> List[Dict]:
     movies = response.json().get("results", [])
     return [format_movie_details(get_movie_details(movie["id"])) for movie in movies if get_movie_details(movie["id"])]
 
+def get_movie_details(movie_id: int) -> Dict:
+    """📌 영화 ID를 기반으로 영화의 세부 정보를 가져옵니다."""
+    url = f"{BASE_URL}/movie/{movie_id}?api_key={API_KEY}&language=ko-KR"
+    response = requests.get(url)
+    return response.json() if response.status_code == 200 else None
+
+
+def search_person(name: str) -> List[Dict]:
+    """📌 배우 이름으로 TMDb에서 배우 검색"""
+    url = f"{BASE_URL}/search/person?api_key={API_KEY}&language=ko-KR&query={name}"
+    response = requests.get(url)
+    return response.json().get("results", []) if response.status_code == 200 else []
+
+
+def fetch_movies_by_person(person_id: int) -> List[Dict]:
+    """📌 특정 배우가 출연한 영화 목록을 가져옵니다."""
+    url = f"{BASE_URL}/person/{person_id}/movie_credits?api_key={API_KEY}&language=ko-KR"
+    response = requests.get(url)
+    return response.json().get("cast", []) if response.status_code == 200 else []
+
+
+def get_movie_recommendations_with_actor():
+    """📌 사용자가 선택한 배우의 출연작 및 추천 영화 표시"""
+    
+    st.subheader("🎭 출연 배우를 선택하여 영화 추천받기")
+
+    # 🔎 사용자에게 배우 이름 입력받기
+    actor_query = st.text_input("🔍 배우 이름을 입력하세요", placeholder="예: 톰 크루즈, 레오나르도 디카프리오")
+
+    if actor_query:
+        actors = search_person(actor_query)
+
+        if actors:
+            # ✅ 배우 선택 박스 (검색 결과 중 첫 번째 5명만 표시)
+            actor_dict = {actor["id"]: actor["name"] for actor in actors[:5]}
+            selected_actor_id = st.selectbox("🎭 출연 배우를 선택하세요", options=list(actor_dict.keys()), format_func=lambda x: actor_dict[x])
+
+            if selected_actor_id:
+                with st.spinner(f"⏳ {actor_dict[selected_actor_id]} 출연 영화를 가져오는 중..."):
+                    movies = fetch_movies_by_person(selected_actor_id)
+                
+                if movies:
+                    st.markdown(f"### 🎬 {actor_dict[selected_actor_id]}의 출연작")
+
+                    # ✅ 최대 5개의 출연작만 표시
+                    for movie in movies[:5]:
+                        poster_url = f"https://image.tmdb.org/t/p/w500{movie.get('poster_path', '')}" if movie.get("poster_path") else "https://via.placeholder.com/500x750?text=No+Image"
+                        st.image(poster_url, width=150, caption=movie.get("title", "Unknown"))
+                        st.write(f"**{movie.get('title', 'Unknown')}** ({movie.get('release_date', 'Unknown')[:4]})")
+                        st.write(f"⭐ 평점: {movie.get('vote_average', 'N/A')}/10")
+                        st.write("---")
+                else:
+                    st.warning("❌ 선택한 배우의 출연작을 찾을 수 없습니다.")
+        else:
+            st.warning("❌ 검색된 배우가 없습니다. 다시 입력해 주세요.")
 
 # =========================== 📌 사용자 맞춤형 추천 ===========================
 
 def get_personalized_recommendations(profile: Dict) -> List[Dict]:
     """📌 사용자 프로필을 기반으로 맞춤 추천 영화를 가져옵니다."""
+    
+    # ✅ 장르 매핑
     genre_map = {
         "액션": 28, "코미디": 35, "드라마": 18, "로맨스": 10749,
         "스릴러": 53, "SF": 878, "애니메이션": 16, "판타지": 14,
-        "공포": 27, "다큐멘터리": 99, "역사": 36
+        "공포": 27, "다큐멘터리": 99, "역사": 36, "모험": 12
     }
+    
     genre_ids = [genre_map[g] for g in profile.get("preferred_genres", []) if g in genre_map]
     movies = []
+    
     for genre_id in genre_ids:
         url = f"{BASE_URL}/discover/movie?api_key={API_KEY}&with_genres={genre_id}&language=ko-KR"
         response = requests.get(url)
-        movies.extend(response.json().get("results", []))
+        if response.status_code == 200:
+            movies.extend(response.json().get("results", []))
+    
     return [format_movie_details(get_movie_details(movie["id"])) for movie in movies[:10]]
-
 
 def get_mood_based_recommendations(mood: str) -> List[Dict]:
     """📌 사용자 감정(무드)에 따라 추천 영화 목록을 가져옵니다."""
+    
     mood_to_genre = {
         "행복한": [35, 10751], "슬픈": [18, 10749], "신나는": [28, 12],
         "로맨틱한": [10749, 35], "무서운": [27, 53], "미스터리한": [9648, 80],
         "판타지한": [14, 12], "편안한": [99, 10770], "추억을 떠올리는": [10752, 36],
         "SF 같은": [878, 28]
     }
-    genre_ids = mood_to_genre.get(mood, [35])
+    
+    genre_ids = mood_to_genre.get(mood, [35])  # 기본값: 코미디 장르
     movies = []
+    
     for genre_id in genre_ids:
         url = f"{BASE_URL}/discover/movie?api_key={API_KEY}&with_genres={genre_id}&language=ko-KR"
         response = requests.get(url)
-        movies.extend(response.json().get("results", []))
+        if response.status_code == 200:
+            movies.extend(response.json().get("results", []))
+    
     return [format_movie_details(get_movie_details(movie["id"])) for movie in movies[:10]]
+
+
 
 
 # =========================== 📌 검색 기능 ===========================
@@ -87,9 +154,20 @@ def get_movies_by_keyword(keyword: str) -> List[Dict]:
     """📌 키워드 검색을 통해 영화 목록을 가져옵니다."""
     url = f"{BASE_URL}/search/movie?api_key={API_KEY}&query={keyword}&language=ko-KR"
     response = requests.get(url)
+    
+    # ✅ API 응답 확인
+    if response.status_code != 200:
+        print(f"🚨 API 요청 실패: {response.status_code}, {response.text}")
+        return []  # API 요청 실패 시 빈 리스트 반환
+    
     movies = response.json().get("results", [])
+    
+    # ✅ 검색된 영화가 없을 경우 최신 영화 추천
+    if not movies:
+        print(f"🔎 '{keyword}' 키워드로 검색된 영화가 없습니다.")
+        return get_trending_movies()[:5]  # 최신 영화 5개 반환
+    
     return [format_movie_details(get_movie_details(movie["id"])) for movie in movies[:10]]
-
 
 # =========================== 📌 AI 추천 시스템 ===========================
 
@@ -100,9 +178,12 @@ def clean_input(text: str) -> str:
 
 def generate_text_via_api(prompt: str) -> str:
     """📌 Hugging Face API를 사용하여 텍스트를 생성합니다."""
+    
     client = get_huggingface_client()
     response = client.text_generation(prompt=prompt)
+    
     return response
+
 
 
 def build_recommendation_prompt(profile: Dict, additional_info: str) -> str:
@@ -119,8 +200,18 @@ def build_recommendation_prompt(profile: Dict, additional_info: str) -> str:
 
 # =========================== 📌 데이터 포맷 ===========================
 
+def get_movie_details(movie_id: int) -> Dict:
+    """📌 영화 ID를 기반으로 영화의 세부 정보를 가져옵니다."""
+    
+    url = f"{BASE_URL}/movie/{movie_id}?api_key={API_KEY}&language=ko-KR"
+    response = requests.get(url)
+    
+    return response.json() if response.status_code == 200 else None
+
+
 def format_movie_details(details: Dict) -> Dict:
     """📌 영화 데이터를 정리하여 반환"""
+    
     overview = details.get("overview", "줄거리 없음")
     short_overview = overview[:100] + "..." if len(overview) > 100 else overview
     poster = details.get("poster_path")
@@ -133,30 +224,3 @@ def format_movie_details(details: Dict) -> Dict:
         "vote_average": details.get("vote_average", "N/A"),
         "poster_path": poster_url
     }
-
-
-# =========================== 📌 실행 테스트 ===========================
-
-if __name__ == "__main__":
-    st.title("🎬 MovieMind - 영화 추천 시스템")
-    
-    st.sidebar.header("🔎 검색 및 추천")
-    search_query = st.sidebar.text_input("영화 검색")
-    
-    if st.sidebar.button("검색"):
-        results = get_movies_by_keyword(search_query)
-        for movie in results:
-            st.image(movie["poster_path"], width=150)
-            st.write(f"**{movie['title']}** ({movie['release_date']})")
-            st.write(f"⭐ 평점: {movie['vote_average']}/10")
-            st.write(f"📜 줄거리: {movie['overview']}")
-    
-    st.sidebar.header("🎭 무드 기반 추천")
-    mood = st.sidebar.selectbox("무드 선택", ["행복한", "슬픈", "신나는", "로맨틱한", "무서운"])
-    
-    if st.sidebar.button("추천 받기"):
-        results = get_mood_based_recommendations(mood)
-        for movie in results:
-            st.image(movie["poster_path"], width=150)
-            st.write(f"**{movie['title']}** ({movie['release_date']})")
-            st.write(f"📜 {movie['overview']}")

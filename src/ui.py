@@ -1,47 +1,34 @@
 import streamlit as st
-from typing import Dict
-from src.auth_user import create_session, create_guest_session, delete_session
-from src.data_fetcher import (
-    fetch_genres_list,
-    fetch_movies_by_category,
-    fetch_movies_by_genre,
-    search_movie,
-    search_person,
-    fetch_movies_by_person,
-    search_keyword_movies,
-    fetch_movies_by_keyword,
-    get_movie_director_and_cast,
-
-
+import time
+from src.auth_user import (
+    create_session, create_guest_session, delete_session, is_user_authenticated
 )
-from src.movie_recommend import generate_text_via_api
-from src.movie_recommend import get_movie_details, get_trending_movies
+from src.data_fetcher import (
+    fetch_genres_list, fetch_movies_by_category, fetch_movies_by_genre,
+    search_movie, search_person, fetch_movies_by_person,
+    search_keyword_movies, fetch_movies_by_keyword,
+    get_movie_details,
+)
+from src.movie_recommend import (
+    get_personalized_recommendations, 
+    get_mood_based_recommendations, 
+    get_movies_by_keyword, get_trending_movies,
+    generate_text_via_api
+)
 from src.auth_user import load_user_preferences, save_user_preferences
 
 
 # ---------------- CSS 스타일 로드 함수 ----------------
 def load_css():
+    """📌 UI 스타일 적용"""
     st.markdown("""
     <style>
         .main-header {
-            font-size: 3rem;
+            font-size: 2.5rem;
             font-weight: 700;
             color: #1DB954;
             text-align: center;
             margin-bottom: 2rem;
-        }
-        .sub-header {
-            font-size: 2rem;
-            font-weight: 600;
-            color: #1DB954;
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-        }
-        .movie-card {
-            background-color: #282828;
-            border-radius: 10px;
-            padding: 1rem;
-            margin-bottom: 1rem;
         }
         .movie-title {
             font-size: 1.2rem;
@@ -52,154 +39,50 @@ def load_css():
             font-size: 0.9rem;
             color: #B3B3B3;
         }
-        .section-divider {
-            margin-top: 2rem;
-            margin-bottom: 2rem;
-            border-top: 1px solid #333333;
-        }
-        /* 인증 영역 스타일 */
-        .auth-container {
-            background: linear-gradient(135deg, #34495E, #2C3E50);
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-        .auth-container p.auth-status {
-            font-size: 18px;
+        .selectbox-label {
+            font-size: 1rem;
             font-weight: bold;
-            color: #ECF0F1;
-        }
-        .auth-button {
-            background: linear-gradient(135deg, #3498DB, #2980B9);
-            color: white;
-            padding: 10px 20px;
-            text-align: center;
-            display: inline-block;
-            font-size: 16px;
-            margin: 4px 2px;
-            border-radius: 12px;
-            border: none;
-            width: 100%;
-            cursor: pointer;
-            transition: background 0.3s, transform 0.3s;
-        }
-        .logout-button {
-            background: linear-gradient(135deg, #E74C3C, #C0392B);
-        }
-        .logout-button:hover {
-            background: linear-gradient(135deg, #C0392B, #A93226);
-        }
-        /* 네비게이션 버튼 스타일 */
-        .nav-container {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            padding: 10px;
-        }
-        .nav-button {
-            background: linear-gradient(135deg, #2C3E50, #1ABC9C);
-            border: none;
-            border-radius: 8px;
-            color: white;
-            padding: 12px 24px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            text-decoration: none;
-        }
-        .nav-button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 12px rgba(0,0,0,0.2);
-        }
-        .nav-button-active {
-            background: linear-gradient(135deg, #1ABC9C, #16A085);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 10px rgba(0,0,0,0.2);
+            margin-bottom: 5px;
+            display: block;
         }
     </style>
     """, unsafe_allow_html=True)
 
+
 # ---------------- 메인 헤더 출력 ----------------
 def main_header():
+    """📌 메인 페이지 헤더"""
     st.markdown("<h1 class='main-header'>MovieMind: 당신만의 영화 여정</h1>", unsafe_allow_html=True)
-
-# ---------------- 사용자 인증 함수 ----------------
-# ✅ 세션 키 초기화 (앱 실행 시 로그인 상태를 관리)
-st.session_state.setdefault("SESSION_ID", None)
-
-def user_authentication():
-    """📌 사용자 로그인 및 게스트 모드 처리"""
-    session_active = bool(st.session_state["SESSION_ID"])
-
-    st.markdown('<div class="auth-container">', unsafe_allow_html=True)
-
-    if not session_active:
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔑 로그인", key="login_btn"):
-                session_id = create_session()
-                if session_id:
-                    st.session_state["SESSION_ID"] = session_id
-                    st.success("✅ 로그인 성공!")
-                    st.experimental_rerun()
-
-        with col2:
-            if st.button("🎭 게스트 모드", key="guest_btn"):
-                guest_session_id = create_guest_session()
-                if guest_session_id:
-                    st.session_state["SESSION_ID"] = guest_session_id
-                    st.success("✅ 게스트 모드 활성화!")
-                    st.experimental_rerun()
-                    
-    else:
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown('<p class="auth-status">🎬 현재 로그인 상태입니다.</p>', unsafe_allow_html=True)
-        with col2:
-            if st.button("🚪 로그아웃", key="logout_btn"):
-                delete_session()  # ✅ 세션 삭제 함수 호출
-                st.session_state["SESSION_ID"] = None  # ✅ 세션 상태 초기화
-                st.success("🚪 로그아웃 완료!")
-                st.experimental_rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-def delete_session():
-    """📌 사용자 세션 삭제 (로그아웃)"""
-    if st.session_state.get("SESSION_ID"):
-        st.session_state["SESSION_ID"] = None
-        st.success("🚪 로그아웃 완료!")
-        st.experimental_rerun()
-    else:
-        st.warning("⚠ 현재 로그인되어 있지 않습니다.")
-
 # ---------------- 네비게이션 메뉴 함수 ----------------
 def navigation_menu():
+    """📌 네비게이션 메뉴 (로그인 여부에 따라 다르게 표시)"""
+    logged_in = bool(st.session_state.get("SESSION_ID"))
+
     if "selected_page" not in st.session_state:
         st.session_state.selected_page = "홈"
-    
+
     nav_cols = st.columns(5)
-    if nav_cols[0].button("🏠 홈", key="nav_home"):
-        st.session_state.selected_page = "홈"
-        st.experimental_rerun()
-    if nav_cols[1].button("🎬 영화 스타일 선택", key="nav_profile"):
-        st.session_state.selected_page = "영화 스타일 선택"
-        st.experimental_rerun()
-    if nav_cols[2].button("🔍 영화 검색", key="nav_search"):
-        st.session_state.selected_page = "영화 검색"
-        st.experimental_rerun()
-    if nav_cols[3].button("🎞️ 추천 생성", key="nav_generate"):
-        st.session_state.selected_page = "추천 생성"
-        st.experimental_rerun()
-    if nav_cols[4].button("🌟 즐겨찾기", key="nav_favorite"):
-        st.session_state.selected_page = "즐겨찾기"
-        st.experimental_rerun()
-    
+
+    if not logged_in:
+        if nav_cols[0].button("🏠 홈"):
+            st.session_state["selected_page"] = "홈"
+            st.rerun()
+    else:
+        if nav_cols[0].button("🎬 사용자 페이지"):
+            st.session_state["selected_page"] = "사용자 페이지"
+            st.rerun()
+
+    if nav_cols[1].button("🌟 즐겨찾기"):
+        st.session_state["selected_page"] = "즐겨찾기"
+        st.rerun()
+    if nav_cols[2].button("🎬 영화 스타일 선택"):
+        st.session_state["selected_page"] = "영화 스타일 선택"
+        st.rerun()
+    if nav_cols[3].button("🎞️ 추천 생성"):
+        st.session_state["selected_page"] = "추천 생성"
+        st.rerun()
+
     return st.session_state.selected_page
-
-
 # ---------------- 즐겨찾기 영화 함수 ----------------
 def show_favorite_movies():
     st.subheader("🌟 즐겨찾기한 영화")
@@ -220,118 +103,235 @@ def show_favorite_movies():
         st.write(f"⭐ 평점: {movie.get('vote_average', '정보없음')}/10")
         st.write(f"📜 줄거리: {movie.get('overview', '정보없음')[:150]}...")
 
-# ---------------- 영화 검색 함수 ----------------
-def show_movie_search():
-    st.subheader("🔍 영화 검색")
-    query = st.text_input("검색할 영화를 입력하세요", placeholder="예: 인셉션, 톰 크루즈")
-    if st.button("검색", key="search_btn"):
-        if not query.strip():
-            st.warning("검색어를 입력해주세요!")
-            return
-        with st.spinner("영화 정보를 검색하는 중..."):
-            movies = search_movie(query) or []
-            actors = search_person(query) or []
-            keywords = search_keyword_movies(query) or []
-        # 배우 선택 및 영화 검색 결과 추가
-        if actors:
-            actor_dict = {actor["id"]: actor["name"] for actor in actors}
-            selected_actor = st.selectbox("출연 배우를 선택하세요", options=list(actor_dict.keys()), format_func=lambda x: actor_dict[x])
-            if selected_actor:
-                movies.extend(fetch_movies_by_person(selected_actor))
-        # 키워드 선택 및 영화 검색 결과 추가
-        if keywords:
-            keyword_dict = {keyword["id"]: keyword["name"] for keyword in keywords}
-            selected_keyword = st.selectbox("키워드를 선택하세요", options=list(keyword_dict.keys()), format_func=lambda x: keyword_dict[x])
-            if selected_keyword:
-                movies.extend(fetch_movies_by_keyword(selected_keyword))
-        if not movies:
-            st.warning(f"'{query}'와 관련된 영화가 없습니다.")
-            return
-        for movie in movies:
-            # Assume get_movie_details() returns a dict with keys including "poster_path", "title", etc.
-
-            # Helper function to ensure full URL for images
-            def get_full_image_url(url: str) -> str:
-                if url and url.startswith("/"):
-                    return f"https://image.tmdb.org/t/p/w500{url}"
-                return url
-
-            details = get_movie_details(movie["id"])
-            if details:
-                poster_url = details.get("poster_path") or "https://via.placeholder.com/500x750?text=정보없음"
-                poster_url = get_full_image_url(poster_url)
-                st.image(poster_url, width=150, caption=details.get("title") or "정보없음")
-                st.write(f"**{details.get('title', '정보없음')}** ({details.get('release_date', '정보없음')})")
-                st.write(f"⭐ 평점: {details.get('vote_average', '정보없음')}/10")
-                st.write(f"📜 줄거리: {details.get('overview', '정보없음')[:150]}...")
-# ---------------- 맞춤 추천 생성 함수 ----------------
-def show_generated_recommendations():
-    st.subheader("🎬 맞춤 영화 추천 생성")
-    user_profile = st.session_state.get("user_profile", {})
-    preferred_genres = ", ".join(user_profile.get("preferred_genres", [])) if user_profile.get("preferred_genres") else "없음"
-    preferred_styles = ", ".join(st.session_state.get("preferred_styles", [])) if st.session_state.get("preferred_styles") else "없음"
-    
-    additional_info = st.text_area("추가 정보를 입력하세요", placeholder="예: 최근 개봉한 영화 위주, 인기 영화 등")
-    
-    prompt = f"""
-    영화의 전체 상세 정보를 출력합니다.
-    fetch_movie_details() 함수를 호출하여 영화의 세부 정보를 가져오고, 이미지, 제목, 개봉일, 평점, 줄거리, 감독, 출연진 등을 출력합니다.
-    사용자가 선호하는 장르는 {preferred_genres}입니다.
-    추가 정보: {additional_info}
-    위의 방식으로, 다음 카테고리별로 각각 5개씩, 총 25개의 영화를 추천해 주세요:
-    - 장르별 영화 추천 5개,
-    - 영화 스타일별 추천 5개,
-    - 지금까지 본 영화 기반 추천 5개,
-    - 좋아하는 영화 기반 추천 5개,
-    - 검색 키워드 기반 추천 5개.
-        """
-    st.write("생성된 추천 프롬프트:")
-    st.code(prompt)
-    result = generate_text_via_api(prompt)
-    st.markdown("### 추천 결과")
-    st.write(result)
 
 
 
-# ---------------- 푸터 출력 함수 ----------------
-def show_footer():
-    st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
-    footer_html = """
-    <div style='text-align: center; color: #B3B3B3; padding: 1rem;'>
-        <p>© 2025 MovieMind. All rights reserved.</p>
-        <p>Developed by <a href="https://github.com/mybear1109" style="color: #9A2EFE; text-decoration: none;">mybear1109 😻</a></p>
-    </div>
-    """
-    st.markdown(footer_html, unsafe_allow_html=True)
-
-
-# ---------------- 프로필 설정 함수 (UI 내에서 정의) ----------------
+# ---------------- 프로필 설정 함수 ----------------
 def show_profile_setup():
+    """📌 사용자 프로필 설정"""
     st.subheader("🔰 선호하는 영화 스타일을 선택해주세요!")
-    with st.spinner("선호하는 영화 스타일을 추천하는 중...⏳"):
+    
+    with st.spinner(" 영화 스타일 정보를 불러오는 중...⏳"):
+        time.sleep(2)  # ✅ 로딩 효과 추가
         from src.data_fetcher import fetch_genres_list, fetch_movies_by_genre
         genre_data = fetch_genres_list()
         genre_dict = {genre["id"]: genre["name"] for genre in genre_data if isinstance(genre, dict)}
         genre_list = list(genre_dict.values()) if genre_dict else ["액션", "코미디", "드라마", "SF", "스릴러"]
 
-        selected_genres = st.multiselect("🎭 선호하는 장르를 선택하세요", genre_list)
-        movie_titles = []
-        if selected_genres:
-            genre_ids = [key for key, value in genre_dict.items() if value in selected_genres]
-            movies = []
-            for genre_id in genre_ids:
-                movies.extend(fetch_movies_by_genre(genre_id) or [])
-            movie_titles = [movie.get("title") or "정보없음" for movie in movies]
+    # ✅ 사용자가 선택할 수 있는 옵션
+    selected_genres = st.multiselect("🎭 선호하는 장르를 선택하세요", genre_list)
+    
+    movie_titles = []
+    if selected_genres:
+        genre_ids = [key for key, value in genre_dict.items() if value in selected_genres]
+        movies = []
+        for genre_id in genre_ids:
+            movies.extend(fetch_movies_by_genre(genre_id) or [])
+        movie_titles = [movie.get("title") or "정보없음" for movie in movies]
 
-        watched_movies = st.multiselect("📌 지금까지 본 영화를 선택하세요", movie_titles)
-        favorite_movies = st.multiselect("🌟 좋아하는 영화를 선택하세요", movie_titles)
-        additional_choices = [
-            "감동적인", "긴장감 있는", "로맨틱한", "현실적인", "코미디 요소", "강렬한 액션", "미스터리한",
-            "예술적인", "비주얼이 뛰어난", "기발한 설정", "다큐멘터리 스타일", "실화 기반", "철학적인"
-        ]
-        preferred_styles = st.multiselect("✨ 추가로 원하는 영화 스타일을 선택하세요", additional_choices)
+    watched_movies = st.multiselect("📌 지금까지 본 영화를 선택하세요", movie_titles)
+    favorite_movies = st.multiselect("🌟 좋아하는 영화를 선택하세요", movie_titles)
+    
+    additional_choices = [
+        "감동적인", "긴장감 있는", "로맨틱한", "현실적인", "코미디 요소", "강렬한 액션", "미스터리한",
+        "예술적인", "비주얼이 뛰어난", "기발한 설정", "다큐멘터리 스타일", "실화 기반", "철학적인"
+    ]
+    preferred_styles = st.multiselect("✨ 추가로 원하는 영화 스타일을 선택하세요", additional_choices)
+    
+    if st.button("💾 저장하기"):
+        save_user_preferences(watched_movies, favorite_movies, selected_genres, preferred_styles)
+        st.success("🎉 프로필이 저장되었습니다! 이제 맞춤형 추천을 받을 수 있어요.")
+
+# ---------------- 기분에 따른 추천 ----------------
+def show_mood_based_recommendations():
+    """🌟 사용자의 기분에 따른 영화 추천"""
+    st.subheader("🌟 기분에 따른 영화 추천")
+
+    mood_dict = {
+        "행복한": [35, 10751],
+        "슬픈": [18, 10749],
+        "신나는": [28, 12],
+        "로맨틱한": [10749, 35],
+        "무서운": [27, 53],
+        "신비로운": [9648, 80],
+        "판타지": [14, 12],
+        "편안한": [99, 10770],
+        "향수를 불러일으키는": [10752, 36],
+        "SF": [878, 28]
+    }
+
+    selected_mood = st.selectbox("오늘 기분은?", list(mood_dict.keys()))
+    genre_ids = mood_dict.get(selected_mood, [])
+
+    mood_movies = []
+    for genre_id in genre_ids:
+        mood_movies.extend(fetch_movies_by_genre(genre_id))
+
+    if not mood_movies:
+        st.warning(f"❌ {selected_mood} 분위기의 추천 영화가 없습니다. 다른 기분을 선택해 보세요!")
+        return
+
+    for movie in mood_movies[:5]:
+        poster_url = f"https://image.tmdb.org/t/p/w500{movie.get('poster_path', '')}" if movie.get("poster_path") else "https://via.placeholder.com/500x750?text=No+Image"
+        st.image(poster_url, use_container_width=True, caption=movie.get("title", "Unknown"))
+        st.write(f"**{movie.get('title', 'Unknown')}** ({movie.get('release_date', 'Unknown')[:4]})")
+
+
+
+# ---------------- 영화 검색 함수 ----------------
+def show_movie_search():
+    st.subheader("🔍 영화 검색")
+    
+    # 🔎 검색 입력 받기
+    query = st.text_input("검색할 영화를 입력하세요", placeholder="예: 인셉션, 톰 크루즈")
+    
+    # ✅ '검색 결과' 상태를 저장할 공간 (초기화)
+    if "search_results" not in st.session_state:
+        st.session_state.search_results = []
+        st.session_state.display_count = 10  # 초기에 표시할 영화 개수
+
+    if st.button("검색", key="search_btn"):
+        if not query.strip():
+            st.warning("❌ 검색어를 입력해주세요!")
+            return
         
-        if st.button("저장하기"):
-            save_user_preferences(watched_movies, favorite_movies, selected_genres, preferred_styles)
-            st.success("🎉 프로필이 저장되었습니다! 이제 맞춤형 추천을 받을 수 있어요.")
+        with st.spinner("영화 정보를 검색하는 중...⏳"):
+            time.sleep(2)  # ✅ 로딩 효과 추가
+            movies = search_movie(query) or []
+            actors = search_person(query) or []
+            keywords = search_keyword_movies(query) or []
 
+        # ✅ 배우 선택 및 영화 검색 결과 추가
+        if actors:
+            actor_dict = {actor["id"]: actor["name"] for actor in actors}
+            selected_actor = st.selectbox(
+                "🎭 출연 배우를 선택하세요",
+                options=list(actor_dict.keys()),
+                format_func=lambda x: actor_dict[x]
+            )
+            if selected_actor:
+                movies.extend(fetch_movies_by_person(selected_actor))
+
+        # ✅ 키워드 선택 및 영화 검색 결과 추가
+        if keywords:
+            keyword_dict = {keyword["id"]: keyword["name"] for keyword in keywords}
+            selected_keyword = st.selectbox(
+                "🔑 키워드를 선택하세요",
+                options=list(keyword_dict.keys()),
+                format_func=lambda x: keyword_dict[x]
+            )
+            if selected_keyword:
+                movies.extend(fetch_movies_by_keyword(selected_keyword))
+
+        # ✅ 검색 결과 저장
+        if movies:
+            st.session_state.search_results = movies
+            st.session_state.display_count = 10  # 결과 초기화
+        else:
+            st.warning(f"❌ '{query}'와 관련된 영화가 없습니다.")
+    
+    # ✅ 검색 결과 표시
+    if st.session_state.search_results:
+        st.markdown("### 🎬 검색 결과")
+
+        # ✅ 처음 10개만 표시 (더보기 버튼 클릭 시 확장)
+        displayed_movies = st.session_state.search_results[: st.session_state.display_count]
+
+        for movie in displayed_movies:
+            details = get_movie_details(movie["id"])
+            if details:
+                poster_url = f"https://image.tmdb.org/t/p/w500{details.get('poster_path', '')}" if details.get("poster_path") else "https://via.placeholder.com/500x750?text=No+Image"
+                st.image(poster_url, width=150, caption=details.get("title", "정보없음"))
+                st.write(f"**{details.get('title', '정보없음')}** ({details.get('release_date', '정보없음')})")
+                st.write(f"⭐ 평점: {details.get('vote_average', '정보없음')}/10")
+                st.write(f"📜 줄거리: {details.get('overview', '정보없음')[:150]}...")
+                st.write("---")
+
+        # ✅ "더보기" 버튼 (남은 영화가 있을 경우)
+        if st.session_state.display_count < len(st.session_state.search_results):
+            if st.button("➕ 더보기", key="load_more_btn"):
+                st.session_state.display_count += 10  # 10개씩 추가 표시
+                st.experimental_rerun()  # UI 업데이트
+
+# ---------------- 맞춤 추천 생성 함수 ----------------
+def show_generated_recommendations():
+    """📌 맞춤형 영화 추천 생성"""
+    st.subheader("🎬 맞춤 영화 추천 생성")
+    
+    # ✅ 사용자 프로필 로드
+    user_preferences = st.session_state.get("user_profile", {})
+    
+    # ✅ 사용자 데이터 확인
+    selected_genres = ", ".join(user_preferences.get("preferred_genres", [])) if user_preferences.get("preferred_genres") else None
+    preferred_styles = ", ".join(user_preferences.get("preferred_styles", [])) if user_preferences.get("preferred_styles") else None
+    watched_movies = user_preferences.get("watched_movies", [])
+    favorite_movies = user_preferences.get("favorite_movies", [])
+
+    # ✅ 추가 정보 입력
+    additional_info = st.text_area("📝 추가 정보를 입력하세요", placeholder="예: 최근 개봉한 영화 위주, 인기 영화 등")
+
+    # ✅ 사용자 정보 또는 추가 정보가 없는 경우 경고
+    if not (selected_genres or preferred_styles or watched_movies or favorite_movies or additional_info.strip()):
+        st.warning("⚠️ 사용자 정보 또는 추가 정보를 입력해 주세요. 최소한 하나의 정보를 제공해야 합니다.")
+        return
+
+    # ✅ "추천 생성" 버튼
+    if st.button("🎬 추천 생성", key="generate_btn"):
+        with st.spinner("⏳ 추천 영화를 찾는 중... 잠시만 기다려 주세요!"):
+            time.sleep(2)  # ✅ 로딩 효과
+            
+            # ✅ 추천 결과 초기화
+            recommendations = {}
+
+            # ✅ 1. 장르 기반 추천 (사용자 정보가 있을 경우)
+            if selected_genres:
+                recommendations["장르별 추천"] = get_personalized_recommendations(user_preferences)[:5]
+
+            # ✅ 2. 영화 스타일 기반 추천 (사용자 정보가 있을 경우)
+            if preferred_styles:
+                recommendations["영화 스타일별 추천"] = get_mood_based_recommendations(preferred_styles)[:5]
+
+            # ✅ 3. 지금까지 본 영화 기반 추천 (사용자 정보가 있을 경우)
+            if watched_movies:
+                recommendations["지금까지 본 영화 기반 추천"] = get_movies_by_keyword(watched_movies[0])[:5]  # ✅ 첫 번째 영화 키워드 검색
+
+            # ✅ 4. 좋아하는 영화 기반 추천 (사용자 정보가 있을 경우)
+            if favorite_movies:
+                recommendations["좋아하는 영화 기반 추천"] = get_movies_by_keyword(favorite_movies[0])[:5]  # ✅ 첫 번째 영화 키워드 검색
+
+            # ✅ 추가 입력한 키워드 기반 추천 (사용자 정보가 없더라도 가능)
+            if additional_info.strip():
+                print(f"🔎 검색 키워드: {additional_info.strip()}")  # 디버깅용 로그 출력
+                recommendations["검색 키워드 기반 추천"] = get_movies_by_keyword(additional_info.strip())[:5]
+
+                # ✅ 검색 결과가 없을 경우 대체 추천 제공
+                if not recommendations["검색 키워드 기반 추천"]:
+                    st.warning(f"🔎 '{additional_info.strip()}'에 대한 영화가 없습니다. 대신 최신 영화를 추천해드립니다!")
+                    recommendations["최신 개봉 영화 추천"] = get_trending_movies()[:5]
+
+            # ✅ 결과 출력
+            st.markdown("### 🎥 추천된 영화 목록")
+
+            for category, movies in recommendations.items():
+                if movies:
+                    st.markdown(f"#### 🔹 {category}")
+                    for movie in movies:
+                        st.write(f"**🎬 {movie['title']}**")
+                        st.write(f"📜 {movie['overview']}\n")
+                else:
+                    st.markdown(f"#### 🔹 {category}")
+                    st.warning("❌ 관련 추천 영화가 없습니다.")
+
+        st.success("✅ 추천이 완료되었습니다!")
+
+
+# ---------------- 푸터 출력 함수 ----------------
+def show_footer():
+    """📌 푸터"""
+    st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style='text-align: center; color: #B3B3B3; padding: 1rem;'>
+        <p>© 2025 MovieMind. All rights reserved.</p>
+        <p>Developed by <a href="https://github.com/mybear1109" style="color: #9A2EFE; text-decoration: none;">mybear1109 😻</a></p>
+    </div>
+    """, unsafe_allow_html=True)

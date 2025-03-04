@@ -56,49 +56,40 @@ def show_full_movie_details(movie):
         st.write(f"**출연진:** {cast_str}")
 
 def show_movie_section(title, movies):
-    """영화 목록을 랜덤으로 5개씩 출력하는 함수"""
     st.markdown(f"<h2 class='sub-header'>{title}</h2>", unsafe_allow_html=True)
-    
     if movies:
-        selected_movies = random.sample(movies, min(5, len(movies)))  # ✅ 랜덤 5개 선택
+        selected_movies = random.sample(movies, min(5, len(movies)))
         cols = st.columns(5)
-
-        for idx, movie in enumerate(selected_movies):  # ✅ 반복문 내에서 movie 변수를 정의
+        for idx, movie in enumerate(selected_movies):
             with cols[idx]:
-                # ✅ 이미지 URL 처리
-                poster_path = movie.get("poster_path")
-                poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else "https://via.placeholder.com/500x750?text=No+Image"
-                
-                # ✅ 영화 정보 처리
+                if not movie.get("directors") or not movie.get("cast"):
+                    directors, cast_list = get_movie_director_and_cast(movie.get("id"))
+                    movie["directors"] = [d.get("name", "정보 없음") for d in directors] if directors else ["정보 없음"]
+                    movie["cast"] = [c.get("name", "정보 없음") for c in cast_list] if cast_list else ["정보 없음"]
+                poster_url = movie.get("poster_path", "https://via.placeholder.com/500x750?text=No+Image")
                 title = movie.get("title", "제목 없음")
                 rating = movie.get("vote_average", "N/A")
                 release_date = movie.get("release_date", "정보 없음")
-                
-                # ✅ 감독 및 출연진 정보 가져오기
-                directors, cast = get_movie_director_and_cast(movie.get("id", None))
-                director_str = ", ".join(directors) if directors else "정보 없음"
-                cast_str = ", ".join(cast[:3]) if cast else "정보 없음"
-
-                # ✅ 줄거리 제한 (100자)
+                director_names = ", ".join(movie.get("directors", ["정보 없음"]))
+                cast_names = ", ".join(movie.get("cast", ["정보 없음"])[:3])
                 overview = movie.get("overview", "줄거리 없음")[:100] + "..."
                 
-                # ✅ 카드 형식으로 영화 정보 출력
-                st.image(poster_url, width=250, use_column_width=False)  # ✅ 이미지 크기 균일화
+                director_html = f"<p class='movie-info'>🎬 감독: {director_names}</p>" if director_names != "정보 없음" else ""
+                cast_html = f"<p class='movie-info'>👥 출연진: {cast_names}</p>" if cast_names != "정보 없음" else ""
+                
+                st.image(poster_url, width=250, use_container_width=False)
                 st.markdown(f"""
                 <div class='movie-card'>
                     <p class='movie-title'>{title}</p>
                     <p class='movie-info'>⭐ 평점: {rating}/10</p>
                     <p class='movie-info'>🗓 개봉일: {release_date}</p>
-                    <p class='movie-info'>🎬 감독: {director_str}</p>
-                    <p class='movie-info'>👥 출연: {cast_str}</p>
                     <p class='movie-info'>📜 줄거리: {overview}</p>
+                    {director_html}
+                    {cast_html}
                 </div>
                 """, unsafe_allow_html=True)
-
-                # ✅ '자세히 보기' 버튼 추가
                 with st.expander("자세히 보기"):
                     show_full_movie_details(movie)
-
     else:
         st.warning(f"{title}를 불러오는 데 문제가 발생했습니다. 잠시 후 다시 시도해주세요.")
 

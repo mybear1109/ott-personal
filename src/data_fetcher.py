@@ -121,7 +121,21 @@ def fetch_movie_details(movie_id):
     except Exception as e:
         print(f"Error fetching movie details: {e}")
         return {}
+
+def get_movie_details(movie_id):
+    """
+    📌 영화 상세 정보 가져오기
+    :param movie_id: TMDb 영화 ID
+    :return: 영화 정보 (딕셔너리)
+    """
+    url = f"{BASE_URL}/movie/{movie_id}"
+    params = { "api_key": API_KEY,"language": "ko-KR", "append_to_response": "credits,videos"}
     
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        return response.json()
+    return {}
+
 def full_movie_details(movie):
     """
     영화의 전체 상세 정보를 출력합니다.
@@ -162,6 +176,25 @@ def full_movie_details(movie):
     st.write(f"**줄거리:** {overview}")
     st.write(f"**감독:** {director_str}")
     st.write(f"**출연진:** {cast_str}")
+
+    
+def fetch_user_movie_list(category="watchlist"):
+    """
+    📌 사용자의 영화 목록 (예: watchlist, favorite) 가져오기
+    :param category: "watchlist" 또는 "favorite"
+    :return: 영화 목록 리스트
+    """
+    session_id = st.session_state.get("SESSION_ID")
+    if not session_id:
+        return []
+
+    url = f"{BASE_URL}/account/{st.secrets['ACCOUNT_ID']}/{category}/movies"
+    params = {"api_key": API_KEY, "session_id": session_id, "language": "ko-KR"}
+    
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        return response.json().get("results", [])
+    return []
 
 # 예시: fetch_movie_details() 함수는 아래와 같이 구현되어 있다고 가정합니다.
 def fetch_movie_details(movie_id):
