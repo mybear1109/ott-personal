@@ -344,3 +344,4 @@ def add_favorite_movie(movie_id):
     except Exception as e:
         print(f"Error adding favorite movie: {e}")
         return False
+    
